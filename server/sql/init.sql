@@ -1,0 +1,32 @@
+CREATE DATABASE IF NOT EXISTS std_db;
+USE std_db;
+
+CREATE TABLE IF NOT EXISTS users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('ISSUER', 'HOLDER') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS documents (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    type ENUM('CERTIFICATE', 'DIPLOMA') NOT NULL,
+    issuer_id INT NOT NULL,
+    holder_id INT NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    document_hash VARCHAR(64) NOT NULL,
+    status ENUM('VALID', 'REVOKED') DEFAULT 'VALID',
+    issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (issuer_id) REFERENCES users(id),
+    FOREIGN KEY (holder_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS verification_requests (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NULL,
+    document_hash VARCHAR(64) NOT NULL,
+    result ENUM('VALID', 'REVOKED', 'NOT_FOUND') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
