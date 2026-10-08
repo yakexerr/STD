@@ -1,0 +1,10 @@
+{
+  "name": "std-blockchain",
+  "version": "1.0.0",
+  "description": "Blockchain core for STD diploma verification platform",
+  "main": "blockchain.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {}
+}
