@@ -1,0 +1,13 @@
+{
+  "devDependencies": {
+    "jest": "^30.5.2"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.8",
+    "jsonwebtoken": "^9.0.3"
+  }
+}
