@@ -151,7 +151,7 @@ export default function AuthPage() {
                                     onChange={(e) => setRole(e.target.value)}
                                     disabled={loading}
                                 />
-                                Владелец (HOLDER)
+                                <span>Владелец (HOLDER)</span>
                             </label>
                             <label>
                                 <input
@@ -161,7 +161,7 @@ export default function AuthPage() {
                                     onChange={(e) => setRole(e.target.value)}
                                     disabled={loading}
                                 />
-                                Эмитент (ISSUER)
+                                <span>Эмитент (ISSUER)</span>
                             </label>
                         </div>
                     </div>

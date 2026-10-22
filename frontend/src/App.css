@@ -104,7 +104,7 @@ h2 {
 
 .radio-group {
     display: flex;
-    gap: 20px;
+    justify-content:space-around;
 }
 
 .radio-group label {
@@ -300,4 +300,257 @@ h2 {
     .hash-cell {
         max-width: 100px;
     }
+}
+
+.container .form {
+    margin: 0 auto;
+}
+
+
+/* Расширение контейнера и новая шапка */
+
+.container-wide {
+    max-width: 1100px;
+    width: 100%;
+}
+
+.account-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #ecf0f1;
+    gap: 20px;
+}
+
+.account-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.account-title {
+    font-size: 1.75rem;
+    color: #2c3e50;
+    margin: 0;
+    font-weight: 600;
+}
+
+.account-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #7f8c8d;
+    font-size: 0.95rem;
+}
+
+.account-meta strong {
+    color: #34495e;
+}
+
+.meta-divider {
+    color: #bdc3c7;
+}
+
+.account-header-actions {
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0; 
+}
+
+.btn-header {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    margin: 0;
+    height: 38px; 
+}
+
+@media (max-width: 768px) {
+    .account-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+    
+    .account-header-actions {
+        width: 100%;
+    }
+    
+    .btn-header {
+        flex: 1;
+    }
+    
+    .account-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .meta-divider {
+        display: none;
+    }
+}
+
+
+
+/* Страница валидации */
+
+.validation-wrapper {
+    max-width: 600px;
+    text-align: left;
+    background-color: transparent;
+    box-shadow: none;
+}
+
+@media (min-width: 769px) {
+    .validation-wrapper {
+        background-color: #fff;
+        margin-top: 40px;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        min-height: auto;
+    }
+}
+
+.validation-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.validation-title {
+    font-size: 1.5rem;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.validation-subtitle {
+    color: #7f8c8d;
+    margin-bottom: 25px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.btn-ghost {
+    background: none;
+    color: #3498db;
+    padding: 8px 12px;
+    font-size: 1rem;
+    margin: 0;
+}
+.btn-ghost:hover {
+    background-color: #ecf0f1;
+    border-radius: 6px;
+}
+
+.file-dropzone {
+    display: block;
+    width: 100%;
+    padding: 40px 20px;
+    background-color: #f8f9fa;
+    border: 2px dashed #bdc3c7;
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 20px;
+}
+
+.file-dropzone:hover {
+    background-color: #ecf0f1;
+    border-color: #3498db;
+}
+
+.file-dropzone.has-file {
+    border-color: #3498db;
+    background-color: #f0f7fc;
+}
+
+.file-dropzone input[type="file"] {
+    display: none;
+}
+
+.dropzone-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.dropzone-icon {
+    width: 40px;
+    height: 40px;
+    color: #3498db;
+}
+
+.dropzone-text {
+    font-weight: 500;
+    color: #2c3e50;
+    font-size: 1.1rem;
+}
+
+.dropzone-hint {
+    font-size: 0.85rem;
+    color: #95a5a6;
+}
+
+.dropzone-filename {
+    font-weight: 600;
+    color: #3498db;
+    word-break: break-all;
+}
+
+.btn-block {
+    width: 100%;
+    margin: 0;
+    padding: 14px;
+    font-size: 1.1rem;
+}
+
+.validation-result-card {
+    margin-top: 30px;
+    padding: 30px 20px;
+    border-radius: 12px;
+    text-align: center;
+    animation: slideUp 0.3s ease;
+}
+
+.validation-result-card.status-valid {
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+.validation-result-card.status-revoked {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+.validation-result-card.status-not_found {
+    background-color: #e2e3e5;
+    border: 1px solid #d6d8db;
+    color: #383d41;
+}
+
+.result-icon {
+    font-size: 3rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.result-title {
+    font-size: 1.4rem;
+    margin-bottom: 8px;
+}
+
+.result-message {
+    font-size: 1rem;
+    opacity: 0.9;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
 }
