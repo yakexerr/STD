@@ -101,18 +101,21 @@ export default function AccountPage() {
     }
 
     return (
-        <div className="container">
-            <div className="header">
-                <div>
-                    <h1>Личный кабинет</h1>
-                    <p><strong>Email:</strong> {user.email}</p>
-                    <p><strong>Роль:</strong> {user.role === 'ISSUER' ? 'Эмитент' : 'Владелец'}</p>
+        <div className="container container-wide">
+            <div className="account-header">
+                <div className="account-header-info">
+                    <h2 className="account-title">Личный кабинет</h2>
+                    <div className="account-meta">
+                        <span><strong>Email:</strong> {user.email}</span>
+                        <span className="meta-divider">•</span>
+                        <span><strong>Роль:</strong> {user.role === 'ISSUER' ? 'Эмитент' : 'Владелец'}</span>
+                    </div>
                 </div>
-                <div>
-                    <button className="btn btn-secondary" onClick={() => navigate('/validation')}>
+                <div className="account-header-actions">
+                    <button className="btn btn-secondary btn-header" onClick={() => navigate('/validation')}>
                         Проверить документ
                     </button>
-                    <button className="btn btn-danger" onClick={handleLogout}>
+                    <button className="btn btn-danger btn-header" onClick={handleLogout}>
                         Выйти
                     </button>
                 </div>
@@ -192,11 +195,11 @@ export default function AccountPage() {
                                             <td>{doc.id}</td>
                                             <td>{doc.type === 'DIPLOMA' ? 'Диплом' : 'Сертификат'}</td>
                                             <td>{doc.holder_id}</td>
-                                            <td className="hash-cell">{doc.document_hash}</td>
+                                            <td className="hash-cell" title={doc.document_hash}>
+                                                {doc.document_hash.substring(0, 8)}...{doc.document_hash.slice(-6)}
+                                            </td>
                                             <td>
-                                                <span className={`status-${doc.status.toLowerCase()}`}>
-                                                    {doc.status}
-                                                </span>
+                                                <td><span className={`status-badge status-${doc.status.toLowerCase()}`}>{doc.status}</span></td>
                                             </td>
                                             <td>{new Date(doc.issued_at).toLocaleString('ru-RU')}</td>
                                             <td>
