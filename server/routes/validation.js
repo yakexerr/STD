@@ -23,15 +23,25 @@ router.post('/check', optionalAuth, upload.single('document'), async (req, res) 
         const blockchain = req.app.get('blockchain');
         const userId = req.user ? req.user.id : null;
 
-        const result = await validationService.checkDocument(
-            blockchain,
-            req.file,
-            userId
-        );
-
+        const result = await validationService.checkDocument(blockchain, req.file, userId);
         res.status(200).json(result);
     } catch (error) {
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('VALIDATION ERROR:', error.message);
+
+        if (error.code === 'BLOCKCHAIN_TAMPERED' || (error.message && error.message.includes('Blockchain integrity check failed'))) {
+            return res.status(500).json({
+                status: 'ERROR',
+                error: 'Blockchain integrity check failed',
+                message: 'Реестр документов скомпрометирован: данные blockchain.json были изменены извне. Проверка недоступна.',
+                details: {
+                    blockIndex: error.details?.blockIndex ?? null,
+                    blockHash: error.details?.blockHash ?? null,
+                    reason: error.details?.reason || error.message
+                }
+            });
+        }
+
+        res.status(500).json({ error: error.message || 'Internal server error' });
     }
 });
 

@@ -29,5 +29,54 @@
     },
     "previousHash": "374e032515a9477ef0c2f9994fd8abb05717c55c5ff7c8c4050cf0b8f1746ce2",
     "hash": "9246d256c88af68ffb025036f4936ca218b1614c4c9013a3ecef037559fd35e1"
+  },
+  {
+    "index": 3,
+    "timestamp": "2026-10-22T10:59:13.386Z",
+    "type": "ISSUE",
+    "data": {
+      "documentId": "3",
+      "documentHash": "71017b965310aaf124523a7a760ceaa24b846c1806ee20438d52af9b0daafc11",
+      "issuerId": "4",
+      "holderId": "3"
+    },
+    "previousHash": "9246d256c88af68ffb025036f4936ca218b1614c4c9013a3ecef037559fd35e1",
+    "hash": "5fc6f76d791338ab0a3a7b6be585bacce9b12b6260eef46cf76bb057050c6c61"
+  },
+  {
+    "index": 4,
+    "timestamp": "2026-10-22T11:06:13.067Z",
+    "type": "ISSUE",
+    "data": {
+      "documentId": "4",
+      "documentHash": "7d499c25c4b549a00c4ab4a5ec9b4527c4e54b6f02d6224ec9d1b74597702e26",
+      "issuerId": "4",
+      "holderId": "3"
+    },
+    "previousHash": "5fc6f76d791338ab0a3a7b6be585bacce9b12b6260eef46cf76bb057050c6c61",
+    "hash": "c304dcbfd53702aef4975e89d985d57ac35a437706c53b19ac72e904d99436ca"
+  },
+  {
+    "index": 5,
+    "timestamp": "2026-10-22T11:10:17.864Z",
+    "type": "ISSUE",
+    "data": {
+      "documentId": "5",
+      "documentHash": "e110e48400dfd7667e17492775777990a6d1a791284490eb97d9ad1e14ba1c1c",
+      "issuerId": "4",
+      "holderId": "3"
+    },
+    "previousHash": "c304dcbfd53702aef4975e89d985d57ac35a437706c53b19ac72e904d99436ca",
+    "hash": "93fba527279881af18b2e58a2ca08826edd00f62521a0c7d2e287f79faf2175f"
+  },
+  {
+    "index": 6,
+    "timestamp": "2026-10-22T11:57:40.683Z",
+    "type": "REVOKE",
+    "data": {
+      "documentId": "5"
+    },
+    "previousHash": "93fba527279881af18b2e58a2ca08826edd00f62521a0c7d2e287f79faf2175f",
+    "hash": "ecbdd3a558456c63946b3b82555b7bcec7c238b45048af9ab45a30e4d8faea8d"
   }
 ]
