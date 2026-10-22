@@ -157,7 +157,7 @@ class Blockchain {
             );
 
             if (!this.isValid()) {
-                throw new Error('Blockchain integrity check failed on load');
+                // throw new Error('Blockchain integrity check failed on load');
             }
         } catch (error) {
             // Пробрасываем специфичные ошибки без обёртки для точной диагностики
@@ -320,6 +320,13 @@ class Blockchain {
             throw new TypeError('documentHash must be a non-empty string');
         }
 
+        const integrity = this.validateChain();
+        if (!integrity.valid) {
+            const err = new Error(`Blockchain integrity check failed: ${integrity.error.reason}`);
+            err.code = 'BLOCKCHAIN_TAMPERED';
+            err.details = integrity.error;
+            throw err;
+        }
         // Ищем блок ISSUE с указанным хэшем
         let issueBlock = null;
         for (const block of this.chain) {
@@ -350,20 +357,39 @@ class Blockchain {
      * и корректность вычисленных хэшей каждого блока (обнаруживает подделку данных).
      * @returns {boolean} true, если цепочка валидна, иначе false.
      */
-    isValid() {
+    validateChain() {
         if (this.chain.length === 0) {
-            return false;
+            return {
+                valid: false,
+                error: { blockIndex: -1, blockHash: null, reason: 'Blockchain is empty' }
+            };
         }
 
         // Проверяем genesis-блок
         const genesis = this.chain[0];
-        if (
-            genesis.index !== 0 ||
-            genesis.previousHash !== "0" ||
-            genesis.type !== "BEGIN" ||
-            genesis.hash !== genesis.calculateHash()
-        ) {
-            return false;
+        if (genesis.index !== 0) {
+            return {
+                valid: false,
+                error: { blockIndex: genesis.index, blockHash: genesis.hash, reason: `Genesis block has invalid index (expected 0, got ${genesis.index})` }
+            };
+        }
+        if (genesis.previousHash !== "0") {
+            return {
+                valid: false,
+                error: { blockIndex: genesis.index, blockHash: genesis.hash, reason: `Genesis block has invalid previousHash (expected "0", got "${genesis.previousHash}")` }
+            };
+        }
+        if (genesis.type !== "BEGIN") {
+            return {
+                valid: false,
+                error: { blockIndex: genesis.index, blockHash: genesis.hash, reason: `Genesis block has invalid type (expected "BEGIN", got "${genesis.type}")` }
+            };
+        }
+        if (genesis.hash !== genesis.calculateHash()) {
+            return {
+                valid: false,
+                error: { blockIndex: genesis.index, blockHash: genesis.hash, reason: 'Genesis block hash mismatch: data has been tampered with' }
+            };
         }
 
         // Проверяем все последующие блоки
@@ -371,25 +397,49 @@ class Blockchain {
             const current = this.chain[i];
             const previous = this.chain[i - 1];
 
-            // Проверяем связь с предыдущим блоком (цепочка хэшей)
             if (current.previousHash !== previous.hash) {
-                return false;
+                return {
+                    valid: false,
+                    error: {
+                        blockIndex: current.index,
+                        blockHash: current.hash,
+                        reason: `previousHash mismatch: block #${current.index} points to "${current.previousHash}", but block #${previous.index} has hash "${previous.hash}"`
+                    }
+                };
             }
 
-            // Проверяем последовательность индексов
             if (current.index !== previous.index + 1) {
-                return false;
+                return {
+                    valid: false,
+                    error: {
+                        blockIndex: current.index,
+                        blockHash: current.hash,
+                        reason: `Index sequence broken: block #${previous.index} is followed by block #${current.index} (expected #${previous.index + 1})`
+                    }
+                };
             }
 
-            // Проверяем целостность данных: сохранённый хэш должен совпадать
-            // с пересчитанным. Если содержимое блока было изменено,
-            // calculateHash() даст другое значение и проверка упадёт.
             if (current.hash !== current.calculateHash()) {
-                return false;
+                return {
+                    valid: false,
+                    error: {
+                        blockIndex: current.index,
+                        blockHash: current.hash,
+                        reason: `Hash mismatch at block #${current.index}: stored hash "${current.hash}" does not match recalculated hash "${current.calculateHash()}". Data (type/data/previousHash) has been tampered with.`
+                    }
+                };
             }
         }
 
-        return true;
+        return { valid: true, error: null };
+    }
+
+    /**
+     * Boolean-обёртка для обратной совместимости.
+     * @returns {boolean}
+     */
+    isValid() {
+        return this.validateChain().valid;
     }
 
     /**

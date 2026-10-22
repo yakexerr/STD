@@ -567,3 +567,82 @@ h2 {
     display: none;
 }
 
+.validation-result-card.status-error {
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    color: #856404;
+}
+
+.error-details {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: rgba(255, 255, 255, 0.6);
+    border-radius: 8px;
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.error-details p {
+    margin-bottom: 6px;
+}
+
+.error-details p:last-child {
+    margin-bottom: 0;
+}
+
+/* Карточка результата — предсказуемая ширина */
+.validation-result-card {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;              /* длинный текст читается лучше слева */
+}
+
+/* Возвращаем иконку и заголовок по центру */
+.validation-result-card .result-icon,
+.validation-result-card .result-title {
+    text-align: center;
+}
+
+/* Блок деталей ошибки — переносим длинные строки */
+.error-details {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: rgba(255, 255, 255, 0.6);
+    border-radius: 8px;
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;       /* переносим длинные слова/хэши */
+    word-break: break-word;        /* фолбэк для старых браузеров */
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.error-details p {
+    margin-bottom: 8px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.error-details p:last-child {
+    margin-bottom: 0;
+}
+
+/* Хэш внутри деталей — тоже переносится */
+.error-details .hash-cell {
+    display: inline;
+    word-break: break-all;
+    white-space: normal;           /* перебиваем глобальный nowrap */
+}
+
+/* Само сообщение тоже не должно выходить */
+.validation-result-card .result-message {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* Если контейнер всё ещё узкий — гарантируем, что карточка не расширяет родителя */
+.validation-wrapper {
+    overflow-x: hidden;
+}

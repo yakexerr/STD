@@ -33,7 +33,17 @@ export default function ValidationPage() {
             const response = await api.validation.check(formData);
             setResult(response.data);
         } catch (err) {
-            setError(err.response?.data?.error || 'Ошибка проверки документа');
+            const data = err.response?.data;
+
+            if (data?.status === 'ERROR') {
+                setResult({
+                    status: 'ERROR',
+                    message: data.message,
+                    details: data.details
+                });
+            } else {
+                setError(data?.error || 'Ошибка проверки документа');
+            }
         } finally {
             setLoading(false);
         }
@@ -147,13 +157,34 @@ export default function ValidationPage() {
                         {result.status === 'VALID' && '✓'}
                         {result.status === 'REVOKED' && '✗'}
                         {result.status === 'NOT_FOUND' && '?'}
+                        {result.status === 'ERROR' && '⚠️'}
                     </div>
                     <h3 className="result-title">
                         {result.status === 'VALID' && 'Документ подлинный'}
                         {result.status === 'REVOKED' && 'Документ отозван'}
                         {result.status === 'NOT_FOUND' && 'Документ не найден'}
+                        {result.status === 'ERROR' && 'Реестр скомпрометирован'}
                     </h3>
                     <p className="result-message">{result.message}</p>
+
+                    {result.status === 'ERROR' && result.details && (
+                        <div className="error-details">
+                            {result.details.blockIndex != null && (
+                                <p><strong>Проблемный блок:</strong> #{result.details.blockIndex}</p>
+                            )}
+                            {result.details.blockHash && (
+                                <p>
+                                    <strong>Хэш блока:</strong>{' '}
+                                    <span className="hash-cell" style={{ fontSize: '0.8rem' }}>
+                                        {result.details.blockHash}
+                                    </span>
+                                </p>
+                            )}
+                            {result.details.reason && (
+                                <p><strong>Причина:</strong> {result.details.reason}</p>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
         </div>
