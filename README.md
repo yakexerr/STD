@@ -22,6 +22,7 @@
 *   [Канбан-доска (Задачи)](https://github.com/users/yakexerr/projects/4)
 *   [Правила разработки (CONTRIBUTING.md)](CONTRIBUTING.md)
 *   [Документация](https://github.com/yakexerr/STD/tree/main/docs)
+*   [Тест-кейсы и чеклист](https://docs.google.com/spreadsheets/d/19yx5UpdDEz0C6Mg8w6TQKjsVrFobmmTXoGkOQvqLMnE/edit?gid=0#gid=0)
 
 ## Роли команды по спринтам
 
