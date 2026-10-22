@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -8,6 +8,10 @@ export default function ValidationPage() {
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [isDragging, setIsDragging] = useState(false);
+
+    const fileInputRef = useRef(null);
+    const dragCounter = useRef(0);
 
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -39,12 +43,50 @@ export default function ValidationPage() {
         navigate(user ? '/account' : '/');
     };
 
-    // Безопасное получение класса статуса
     const statusClass = (result?.status || 'unknown').toLowerCase();
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDragEnter = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current += 1;
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            setIsDragging(true);
+        }
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current -= 1;
+        if (dragCounter.current === 0) {
+            setIsDragging(false);
+        }
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        dragCounter.current = 0;
+        
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const droppedFile = e.dataTransfer.files[0];
+            if (droppedFile.type === 'application/pdf') {
+                setFile(droppedFile);
+                setError('');
+            } else {
+                setError('Пожалуйста, загрузите файл в формате PDF');
+            }
+        }
+    };
 
     return (
         <div className="container validation-wrapper">
-            {/* Шапка с кнопкой Назад */}
             <div className="validation-header">
                 <button type="button" className="btn btn-ghost" onClick={handleBack}>
                     ← Назад
@@ -57,12 +99,22 @@ export default function ValidationPage() {
             </p>
 
             <form onSubmit={handleCheck} className="validation-form">
-                {/* Красивая зона загрузки файла */}
-                <label className={`file-dropzone ${file ? 'has-file' : ''}`}>
+                <label 
+                    className={`file-dropzone ${isDragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
+                    onDragEnter={handleDragEnter}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                >
                     <input
                         type="file"
                         accept=".pdf"
-                        onChange={(e) => setFile(e.target.files[0] || null)}
+                        ref={fileInputRef}
+                        onChange={(e) => {
+                            setFile(e.target.files[0] || null);
+                            setError('');
+                        }}
                         disabled={loading}
                     />
                     <div className="dropzone-content">
@@ -73,7 +125,9 @@ export default function ValidationPage() {
                             <span className="dropzone-filename">{file.name}</span>
                         ) : (
                             <>
-                                <span className="dropzone-text">Нажмите для выбора файла</span>
+                                <span className="dropzone-text">
+                                    {isDragging ? 'Отпустите файл для загрузки' : 'Нажмите для выбора файла'}
+                                </span>
                                 <span className="dropzone-hint">или перетащите PDF сюда</span>
                             </>
                         )}
@@ -87,7 +141,6 @@ export default function ValidationPage() {
 
             {error && <div className="error-message fade-in">{error}</div>}
 
-            {/* Результат проверки */}
             {result && (
                 <div className={`validation-result-card status-${statusClass} fade-in`}>
                     <div className="result-icon">

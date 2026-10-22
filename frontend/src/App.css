@@ -554,3 +554,16 @@ h2 {
     from { opacity: 0; transform: translateY(15px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+.file-dropzone.dragging {
+    background-color: #e3f2fd;
+    border-color: #2980b9;
+    border-style: solid;
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+}
+
+.file-dropzone input[type="file"] {
+    display: none;
+}
+
