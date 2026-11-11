@@ -15,7 +15,7 @@
 ```bash
 node -e "const {Block}=require('./blockchain/blockchain'); console.log(JSON.stringify({block:new Block(<N>, new Date().toISOString(), 'ISSUE', {documentId:'999', documentHash:'a'.repeat(64), issuerId:'1', holderId:'2'}, '<HASH>').toJSON()}))"
 ```
-Скрипт печатает готовое тело запроса с корректным хэшем. Для негативных кейсов меняем в нём одно поле (что именно — указано в шагах). Сохранить в `block.json`, слать так:
+Скрипт печатает готовое тело запроса с корректным хэшем. Для негативных кейсов меняем указанное поле. Если в кейсе сказано «пересчитать hash» — генерируем заготовку тем же скриптом, подставив изменённое значение (хэш вычислится автоматически). Сохранить в `block.json`, слать так:
 ```bash
 curl -X POST -H "X-Network-Token: std-network-secret" -H "Content-Type: application/json" -d @block.json http://localhost:5002/api/node/blocks
 ```
@@ -62,25 +62,27 @@ curl -X POST -H "X-Network-Token: std-network-secret" -H "Content-Type: applicat
 
 ### D. Приём некорректного блока (POST /api/node/blocks на N2)
 
-Для D2–D13: взять заготовку из §1, изменить указанное поле. После каждого — проверка неизменности цепочки N2.
+Для D2–D13 и D15: взять заготовку из §1, изменить указанное поле. После каждого — проверка неизменности цепочки N2.
 
 | ID | Что отправляем | Ожидаемый результат |
 |---|---|---|
 | D1a | Запрос без заголовка `T` | 401 `UNAUTHORIZED` |
 | D1b | Заголовок с неверным токеном | 401 `UNAUTHORIZED` |
+| D1c | `GET /api/node/info` без заголовка `T` | 401 `UNAUTHORIZED` |
 | D2 | Удалить поле `previousHash` (или тело без обёртки `block`) | 400 `INVALID_FORMAT`, details.field указывает на проблему |
 | D3 | `hash: "xyz"` (не 64 hex) | 400 `INVALID_FORMAT` |
 | D4 | `type: "BEGIN"` | 422 `INVALID_TYPE` |
 | D5 | Поменять `data.holderId` на `"hacker"`, hash не трогать | 422 `INVALID_HASH`, details.expected ≠ details.received |
-| D6 | Прислать блок, который у N2 уже есть (взять её последний блок), дважды | 200 `accepted:false, reason:"DUPLICATE_BLOCK"`; дубль не создан |
+| D6 | Прислать блок, который у N2 уже есть, дважды (в цепочке N2 должен быть ≥1 ISSUE — на одном genesis сработает проверка типа) | 200 `accepted:false, reason:"DUPLICATE_BLOCK"`; дубль не создан |
 | D7 | Заготовку с index = последний index N2, но другим data (пересчитать hash скриптом) | 409 `BLOCK_CONFLICT` |
-| D8 | Заготовку с index = chainLength N2 + 5 | 409 `CHAIN_GAP`, details.expectedIndex = chainLength N2 |
-| D9 | Заготовку с правильным index, но `previousHash` = 64 нуля | 422 `PREV_HASH_MISMATCH` |
+| D8 | Заготовку с index = chainLength N2 + 5 (**пересчитать hash**: в скрипте `<N>` = chainLength + 5) | 409 `CHAIN_GAP`, details.expectedIndex = chainLength N2 |
+| D9 | Заготовку с правильным index, но `previousHash` = 64 нуля (**пересчитать hash**) | 422 `PREV_HASH_MISMATCH` |
 | D10 | Валидный следующий блок ISSUE с documentId уже существующего документа | 422 `DUPLICATE_DOCUMENT`, details.field = documentId |
 | D11 | Валидный следующий блок ISSUE с documentHash уже существующего документа | 422 `DUPLICATE_DOCUMENT`, details.field = documentHash |
 | D12 | Валидный следующий блок REVOKE с `documentId: "999999"` | 422 `DOCUMENT_NOT_FOUND` |
 | D13 | Валидный следующий блок REVOKE для уже отозванного документа | 422 `ALREADY_REVOKED` |
 | D14 | Цепочка самой N2 повреждена в памяти (только автотест: испортить `bc.chain[1].data` после загрузки) | 503 `LOCAL_CHAIN_TAMPERED`, details из validateChain |
+| D15 | ISSUE-заготовку с `data: {}` (**пересчитать hash**); вариант: REVOKE без `documentId` | 400 `INVALID_FORMAT`, details.field указывает на поле в data |
 
 Примечание: D14 вручную не воспроизводится — после восстановления проверки в `load()` нода с битым файлом просто не стартует (см. R3).
 
@@ -112,7 +114,7 @@ curl -X POST -H "X-Network-Token: std-network-secret" -H "Content-Type: applicat
 
 ## 5. Автоматизация
 
-- **Jest (юнит, обязательно):** D2–D14 — новый файл `tests/blockchainExternal.test.js`, прямые вызовы `addExternalBlock()` на экземпляре с временным файлом; плюс `getBlocks()` (срезы, границы) и падение `load()` на битом файле (R3).
+- **Jest (юнит, обязательно):** D2–D15 — новый файл `tests/blockchainExternal.test.js`, прямые вызовы `addExternalBlock()` на экземпляре с временным файлом; плюс `getBlocks()` (срезы, границы) и падение `load()` на битом файле (R3).
 - **Jest (по возможности):** B2–B5, F4–F5 через supertest на поднятом app.
 - **Вручную (чеклист):** A, C, E, F1–F3, G — требуют двух живых процессов.
 - Отчёт тестировщика: таблица ID / статус (PASS/FAIL) / комментарий, приложить к PR.

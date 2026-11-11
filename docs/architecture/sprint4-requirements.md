@@ -73,17 +73,19 @@
 | # | Проверка | code | HTTP | details |
 |---|---|---|---|---|
 | 1 | своя цепочка целая (validateChain) | `LOCAL_CHAIN_TAMPERED` | 503 | `{ blockIndex, blockHash, reason }` |
-| 2 | все 6 полей, типы, хэши = 64 hex | `INVALID_FORMAT` | 400 | `{ field, problem }` |
+| 2 | формат верхнего уровня: все 6 полей; `index` — целое ≥ 0; `timestamp` — непустая строка; `hash`/`previousHash` — 64 hex-символа (нижний регистр) | `INVALID_FORMAT` | 400 | `{ field, problem }` |
 | 3 | type ∈ {ISSUE, REVOKE} | `INVALID_TYPE` | 422 | `{ received, allowed }` |
-| 4 | пересчитанный hash === присланному | `INVALID_HASH` | 422 | `{ expected, received }` |
-| 5 | index занят тем же блоком | → `200 DUPLICATE_BLOCK` | 200 | — |
-| 6 | index занят ДРУГИМ хэшем | `BLOCK_CONFLICT` | 409 | `{ index, localHash, receivedHash }` |
-| 7a | index > latest.index + 1 (дырка) | `CHAIN_GAP` | 409 | `{ receivedIndex, expectedIndex }` |
-| 7b | previousHash !== latest.hash | `PREV_HASH_MISMATCH` | 422 | `{ expected, received }` |
-| 8a | ISSUE: documentId или documentHash уже в цепочке | `DUPLICATE_DOCUMENT` | 422 | `{ field, value }` |
-| 8b | REVOKE: документа нет | `DOCUMENT_NOT_FOUND` | 422 | `{ documentId }` |
-| 8c | REVOKE: уже отозван | `ALREADY_REVOKED` | 422 | `{ documentId }` |
+| 4 | схема `data` соответствует `type`: ISSUE — `documentId`, `documentHash`, `issuerId`, `holderId` — непустые строки, `documentHash` — 64 hex; REVOKE — `documentId` — непустая строка. Других полей в `data` нет | `INVALID_FORMAT` | 400 | `{ field, problem }` |
+| 5 | пересчитанный hash === присланному | `INVALID_HASH` | 422 | `{ expected, received }` |
+| 6 | index занят тем же блоком | → `200 DUPLICATE_BLOCK` | 200 | — |
+| 7 | index занят ДРУГИМ хэшем | `BLOCK_CONFLICT` | 409 | `{ index, localHash, receivedHash }` |
+| 8a | index > latest.index + 1 (дырка) | `CHAIN_GAP` | 409 | `{ receivedIndex, expectedIndex }` |
+| 8b | previousHash !== latest.hash | `PREV_HASH_MISMATCH` | 422 | `{ expected, received }` |
+| 9a | ISSUE: documentId или documentHash уже в цепочке | `DUPLICATE_DOCUMENT` | 422 | `{ field, value }` |
+| 9b | REVOKE: документа нет | `DOCUMENT_NOT_FOUND` | 422 | `{ documentId }` |
+| 9c | REVOKE: уже отозван | `ALREADY_REVOKED` | 422 | `{ documentId }` |
 
+Примечание: ядро на бизнес-пути (issue/revoke) использует код `BLOCKCHAIN_TAMPERED`; на границе P2P (шаг 1) код контракта — `LOCAL_CHAIN_TAMPERED`.
 Любой отказ = цепочка и файл ноды **не изменились**. `BEGIN` из сети не принимается (шаг 3).
 
 ### 3.5. POST /api/node/sync — ручная синхронизация (pull)
@@ -94,7 +96,7 @@
 1. `GET /info`; недоступен/таймаут → в результат `PEER_UNAVAILABLE`;
 2. `networkId` не совпал → `GENESIS_MISMATCH`, соседа пропускаем;
 3. его `chainLength` > нашего → `GET /blocks?fromIndex=<наша длина>&limit=100`, повторять пока догоним;
-4. применять блоки по одному через `addExternalBlock`; дубликат — не ошибка, идём дальше; первый отказ → стоп по этому соседу, код отказа в результат.
+4. применять блоки по одному через `addExternalBlock`; дубликат — не ошибка, идём дальше (считается в `fetched`, но не в `applied`); первый отказ → стоп по этому соседу, код отказа в результат.
 
 Ответ всегда `200` (ошибки соседей — внутри results):
 ```json

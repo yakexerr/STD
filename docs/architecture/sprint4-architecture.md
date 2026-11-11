@@ -123,7 +123,7 @@ copy blockchain\blockchain.json data\node2.json
 
 ### 3.5. Правки существующего кода
 
-- `server/server.js`: `new Blockchain(path.resolve(config.BLOCKCHAIN_FILE))` вместо `new Blockchain()`; подключить роутер `/api/node`.
+- `server/server.js`: `new Blockchain(path.join(__dirname, '..', config.BLOCKCHAIN_FILE))` — путь якорится от корня репо, а не от текущей рабочей директории (запуск из `server/` тоже работает); подключить роутер `/api/node`.
 - `frontend/src/services/api.js`: `baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'`. Для демо с нодой 1 запускаем фронт с `VITE_API_URL=http://localhost:5001/api`.
 
 ## 4. Изменения в ядре (blockchain/blockchain.js)
@@ -133,16 +133,17 @@ copy blockchain\blockchain.json data\node2.json
 3. **Новый метод `getBlocks(fromIndex = 0, limit = 100)`** → массив блоков (обычные JSON-объекты через `toJSON()`), срез цепочки. Ничего не меняет.
 4. **Новый метод `addExternalBlock(blockData)`** — единственный путь добавить блок, полученный из сети. Порядок проверок (каждый шаг при провале даёт свою ошибку с `code` и `details`, полный контракт — в sprint4-requirements.md §3.4):
    1. целостность собственной цепочки (`validateChain`);
-   2. формат: все 6 полей на месте, типы корректны, хэши — 64 hex-символа;
+   2. формат верхнего уровня: 6 полей, типы, index — целое ≥ 0, хэши — 64 hex;
    3. тип блока: только `ISSUE` или `REVOKE` (`BEGIN` из сети не принимается);
-   4. пересчёт хэша: `calculateHash()` от полученных полей === `block.hash`;
-   5. дубликат: блок с таким index и таким же hash уже есть → вернуть `{ accepted: false, reason: 'DUPLICATE_BLOCK' }` (не ошибка);
-   6. конфликт: на этом index у нас ДРУГОЙ хэш → отказ (форки в этом спринте не решаем);
-   7. стыковка: `index === latest.index + 1` и `previousHash === latest.hash`;
-   8. бизнес-правила: для ISSUE — documentId/documentHash уникальны; для REVOKE — документ существует и не отозван;
-   9. добавить в цепочку + `save()`, вернуть `{ accepted: true, chainLength }`.
+   4. схема `data` соответствует типу (ISSUE: 4 непустых строковых поля, documentHash — 64 hex; REVOKE: documentId);
+   5. пересчёт хэша: `calculateHash()` от полученных полей === `block.hash`;
+   6. дубликат: блок с таким index и таким же hash уже есть → `{ accepted: false, reason: 'DUPLICATE_BLOCK' }` (не ошибка);
+   7. конфликт: на этом index у нас ДРУГОЙ хэш → отказ (форки в этом спринте не решаем);
+   8. стыковка: `index === latest.index + 1` и `previousHash === latest.hash`;
+   9. бизнес-правила: для ISSUE — documentId/documentHash уникальны; для REVOKE — документ существует и не отозван;
+   10. добавить в цепочку + `save()`, вернуть `{ accepted: true, chainLength }`.
 
-   Свой блок не пересчитываем: timestamp и hash берём как пришли (иначе хэш разойдётся).
+   Свой блок не пересчитываем: timestamp и hash берём как пришли. Полученный `data` сохраняем как есть (сортировка ключей — только внутри вычисления хэша).
 
 ## 5. P2P API (новый роутер server/routes/node.js)
 
@@ -188,14 +189,14 @@ ISSUER → Нода1: POST /api/documents/issue (PDF, как в спринте 2
 ### 6.3. Негатив — сосед прислал плохой блок
 ```
 НодаX → Нода2: POST /api/node/blocks { block с испорченным hash }
-Нода2: шаг 4 провален → 422 { error: { code: 'INVALID_HASH', message, details: { expected, received } } }
+Нода2: шаг 5 провален → 422 { error: { code: 'INVALID_HASH', message, details: { expected, received } } }
 Цепочка Ноды2 не изменилась.
 ```
 
 ## 7. Безопасность (минимум для учебного спринта)
 
 - **`X-Network-Token`** — общий секрет в заголовке, чтобы посторонние не слали блоки. Не совпал → 401.
-- **`networkId` (хэш genesis)** — проверка «мы из одной сети» при sync; при push несовместимость выявится отказом на шагах 6–7 валидации.
+- **`networkId` (хэш genesis)** — проверка «мы из одной сети» при sync; при push несовместимость выявится отказом на шагах 7-8 валидации.
 - Подписи блоков (Ed25519 из «Описание формата.md») — future work.
 
 ## 8. Ограничения и эволюция
