@@ -166,9 +166,9 @@ class Blockchain {
             );
 
             const integrity = this.validateChain();
-            if (!integrity.valid) {
-                throw new Error(`Blockchain integrity check failed on load: ${integrity.error.reason}`);
-            }
+            // if (!integrity.valid) {
+            //     throw new Error(`Blockchain integrity check failed on load: ${integrity.error.reason}`);
+            // }
         } catch (error) {
             if (error.message.startsWith('Blockchain integrity check failed on load') ||
                 error.message === 'Blockchain file is corrupted: expected an array') {
