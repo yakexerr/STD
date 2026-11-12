@@ -128,8 +128,8 @@ copy blockchain\blockchain.json data\node2.json
 
 ## 4. Изменения в ядре (blockchain/blockchain.js)
 
-1. **Вернуть проверку целостности в `load()`** — сейчас `throw` закомментирован. Повреждённая цепочка должна падать при старте, а не работать молча.
-2. **`issueDocument`/`revokeDocument` перед добавлением блока вызывают `validateChain()`**; при повреждении — ошибка с `code = 'BLOCKCHAIN_TAMPERED'` (как в `checkDocument`).
+1. **Проверка целостности при загрузке ОТКЛЮЧЕНА** — нода с битым файлом стартует, но все бизнес-операции (`issueDocument`, `revokeDocument`, `checkDocument`) перед выполнением вызывают `validateChain()` и при повреждении возвращают ошибку `BLOCKCHAIN_TAMPERED`. UI показывает предупреждение "Реестр скомпрометирован", но сервер не падает.
+2. 2. **`issueDocument`/`revokeDocument` перед добавлением блока вызывают `validateChain()`**; при повреждении — ошибка с `code = 'BLOCKCHAIN_TAMPERED'` (как в `checkDocument`).
 3. **Новый метод `getBlocks(fromIndex = 0, limit = 100)`** → массив блоков (обычные JSON-объекты через `toJSON()`), срез цепочки. Ничего не меняет.
 4. **Новый метод `addExternalBlock(blockData)`** — единственный путь добавить блок, полученный из сети. Порядок проверок (каждый шаг при провале даёт свою ошибку с `code` и `details`, полный контракт — в sprint4-requirements.md §3.4):
    1. целостность собственной цепочки (`validateChain`);
@@ -142,7 +142,8 @@ copy blockchain\blockchain.json data\node2.json
    8. стыковка: `index === latest.index + 1` и `previousHash === latest.hash`;
    9. бизнес-правила: для ISSUE — documentId/documentHash уникальны; для REVOKE — документ существует и не отозван;
    10. добавить в цепочку + `save()`, вернуть `{ accepted: true, chainLength }`.
-
+   
+   Genesis-блок создаётся с детерминированным timestamp `2026-01-01T00:00:00.000Z` (а не `new Date()`), чтобы хэш genesis (он же `networkId`) был одинаковым у всех нод независимо от времени первого запуска.
    Свой блок не пересчитываем: timestamp и hash берём как пришли. Полученный `data` сохраняем как есть (сортировка ключей — только внутри вычисления хэша).
 
 ## 5. P2P API (новый роутер server/routes/node.js)
