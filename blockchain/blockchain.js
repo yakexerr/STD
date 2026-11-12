@@ -185,6 +185,10 @@ class Blockchain {
      */
     save() {
         try {
+            const dir = path.dirname(this.filePath);
+            if (dir && dir !== '.' && !fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
             fs.writeFileSync(this.filePath, JSON.stringify(this.chain, null, 2), 'utf8');
         } catch (error) {
             throw new Error(`Failed to save blockchain: ${error.message}`);
@@ -195,8 +199,9 @@ class Blockchain {
      * Создает и добавляет genesis-блок (начальный блок цепочки с индексом 0).
      */
     createGenesisBlock() {
-        const genesisBlock = new Block(0, new Date().toISOString(), "BEGIN", {}, "0");
-        this.chain = [genesisBlock];
+        const genesis = new Block(0, '2026-01-01T00:00:00.000Z', 'BEGIN', {}, '0');
+        this.chain = [genesis];
+        this.save();
     }
 
     /**
