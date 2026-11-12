@@ -4,6 +4,22 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
+const HEX_64_REGEX = /^[0-9a-f]{64}$/;
+
+/**
+ * Создаёт структурированный объект ошибки ядра с кодом и деталями контракта.
+ * @param {string} code - Машинный код ошибки.
+ * @param {string} message - Человекочитаемое описание ошибки.
+ * @param {Object} [details={}] - Дополнительные параметры ошибки.
+ * @returns {Error}
+ */
+function createChainError(code, message, details = {}) {
+    const err = new Error(message);
+    err.code = code;
+    err.details = details;
+    return err;
+}
+
 /**
  * Рекурсивно сортирует ключи объекта по алфавиту на всех уровнях вложенности.
  * Гарантирует детерминированную сериализацию независимо от исходного порядка ключей.
@@ -42,13 +58,13 @@ class Block {
     /**
      * Создает экземпляр блока.
      * При создании нового блока хэш вычисляется автоматически.
-     * При загрузке из файла используется оригинальный хэш из файла для валидации целостности.
+     * При загрузке из файла или получении из сети используется оригинальный хэш для валидации целостности.
      * @param {number} index - Порядковый индекс блока в цепочке.
      * @param {string} timestamp - Временная метка создания блока в формате ISO 8601.
      * @param {string} type - Тип блока: "BEGIN", "ISSUE" или "REVOKE".
      * @param {Object} data - Пользовательские данные блока.
      * @param {string} previousHash - SHA-256 хэш предыдущего блока.
-     * @param {string|null} [hash=null] - Оригинальный хэш блока (при загрузке из файла) или null (при создании).
+     * @param {string|null} [hash=null] - Оригинальный хэш блока или null (при создании).
      */
     constructor(index, timestamp, type, data, previousHash, hash = null) {
         this.index = index;
@@ -56,8 +72,6 @@ class Block {
         this.type = type;
         this.data = data;
         this.previousHash = previousHash;
-        // Если hash передан (загрузка из файла) — используем его для валидации целостности.
-        // Если не передан (создание нового блока) — вычисляем на основе содержимого.
         this.hash = hash !== null ? hash : this.calculateHash();
     }
 
@@ -67,10 +81,10 @@ class Block {
      * @returns {string} Hex-строка SHA-256 хэша длиной 64 символа.
      */
     calculateHash() {
-        const payload = String(this.index) 
-            + this.timestamp 
-            + this.type 
-            + deterministicStringify(this.data) 
+        const payload = String(this.index)
+            + this.timestamp
+            + this.type
+            + deterministicStringify(this.data)
             + this.previousHash;
         return crypto.createHash('sha256').update(payload).digest('hex');
     }
@@ -94,8 +108,8 @@ class Block {
 
 /**
  * Класс, реализующий логику цепочки блоков.
- * Управляет хранением цепочки в JSON-файле, валидацией целостности
- * и операциями выпуска/отзыва документов.
+ * Управляет хранением цепочки в JSON-файле, валидацией целостности,
+ * операциями выпуска/отзыва документов и приёмом блоков от других нод.
  */
 class Blockchain {
     /**
@@ -112,7 +126,7 @@ class Blockchain {
 
     /**
      * Загружает цепочку блоков из файла.
-     * Если файл отсутствует или пуст - инициализирует genesis-блок.
+     * Если файл отсутствует или пуст — инициализирует genesis-блок.
      * При загрузке существующего файла восстанавливает блоки с оригинальными хэшами
      * и проверяет криптографическую целостность всей цепочки.
      * @throws {Error} Если файл повреждён (не является массивом).
@@ -136,15 +150,10 @@ class Blockchain {
 
             const parsedChain = JSON.parse(fileContent);
 
-            // Проверяем, что содержимое файла является массивом блоков
             if (!Array.isArray(parsedChain)) {
                 throw new Error('Blockchain file is corrupted: expected an array');
             }
 
-            // Восстанавливаем блоки, передавая оригинальные хэши из файла.
-            // Это позволяет обнаруживать подделку данных при проверке целостности:
-            // если злоумышленник изменит содержимое блока, сохранённый хэш
-            // не совпадёт с пересчитанным, и isValid() вернёт false.
             this.chain = parsedChain.map(blockData =>
                 new Block(
                     blockData.index,
@@ -152,16 +161,16 @@ class Blockchain {
                     blockData.type,
                     blockData.data,
                     blockData.previousHash,
-                    blockData.hash  // ← оригинальный хэш из файла
+                    blockData.hash
                 )
             );
 
-            if (!this.isValid()) {
-                // throw new Error('Blockchain integrity check failed on load');
+            const integrity = this.validateChain();
+            if (!integrity.valid) {
+                throw new Error(`Blockchain integrity check failed on load: ${integrity.error.reason}`);
             }
         } catch (error) {
-            // Пробрасываем специфичные ошибки без обёртки для точной диагностики
-            if (error.message === 'Blockchain integrity check failed on load' ||
+            if (error.message.startsWith('Blockchain integrity check failed on load') ||
                 error.message === 'Blockchain file is corrupted: expected an array') {
                 throw error;
             }
@@ -227,18 +236,23 @@ class Blockchain {
 
     /**
      * Регистрирует выпуск нового документа, создавая блок типа ISSUE.
-     * Проверяет уникальность как documentId, так и documentHash по всей цепочке.
-     * @param {string} documentId - Уникальный идентификатор документа (UUID).
+     * Проверяет целостность цепочки и уникальность documentId и documentHash.
+     * @param {string} documentId - Уникальный идентификатор документа.
      * @param {string} documentHash - SHA-256 хэш содержимого документа.
      * @param {string} issuerId - Идентификатор эмитента (ВУЗа).
      * @param {string} holderId - Идентификатор владельца документа.
      * @returns {Block} Созданный блок типа ISSUE.
-     * @throws {TypeError} Если какой-либо из параметров не является непустой строкой.
-     * @throws {Error} Если документ с таким ID уже зарегистрирован.
-     * @throws {Error} Если документ с таким хэшем уже зарегистрирован.
      */
     issueDocument(documentId, documentHash, issuerId, holderId) {
-        // Валидация входных параметров
+        const integrity = this.validateChain();
+        if (!integrity.valid) {
+            throw createChainError(
+                'BLOCKCHAIN_TAMPERED',
+                `Blockchain integrity check failed: ${integrity.error.reason}`,
+                integrity.error
+            );
+        }
+
         if (typeof documentId !== 'string' || documentId.trim() === '') {
             throw new TypeError('documentId must be a non-empty string');
         }
@@ -252,7 +266,6 @@ class Blockchain {
             throw new TypeError('holderId must be a non-empty string');
         }
 
-        // Проверяем уникальность documentId и documentHash по всей цепочке
         for (const block of this.chain) {
             if (block.type === 'ISSUE') {
                 if (block.data.documentId === documentId) {
@@ -269,21 +282,24 @@ class Blockchain {
 
     /**
      * Отзывает ранее выпущенный документ, создавая блок типа REVOKE.
-     * Использует двухпроходную логику: сначала собирает информацию о документе,
-     * затем принимает решение о возможности отзыва.
+     * Проверяет целостность цепочки, наличие ISSUE и отсутствие повторного REVOKE.
      * @param {string} documentId - Идентификатор отзываемого документа.
      * @returns {Block} Созданный блок типа REVOKE.
-     * @throws {TypeError} Если documentId не является непустой строкой.
-     * @throws {Error} Если документ с таким ID не найден в цепочке.
-     * @throws {Error} Если документ уже был отозван ранее.
      */
     revokeDocument(documentId) {
-        // Валидация входного параметра
+        const integrity = this.validateChain();
+        if (!integrity.valid) {
+            throw createChainError(
+                'BLOCKCHAIN_TAMPERED',
+                `Blockchain integrity check failed: ${integrity.error.reason}`,
+                integrity.error
+            );
+        }
+
         if (typeof documentId !== 'string' || documentId.trim() === '') {
             throw new TypeError('documentId must be a non-empty string');
         }
 
-        // Первый проход: собираем информацию
         let foundIssue = false;
         let foundRevoke = false;
 
@@ -296,7 +312,6 @@ class Blockchain {
             }
         }
 
-        // Второй проход: принимаем решение на основе собранной информации
         if (!foundIssue) {
             throw new Error(`Document ${documentId} not found`);
         }
@@ -312,22 +327,21 @@ class Blockchain {
      * Сканирует всю цепочку для поиска ISSUE и потенциального REVOKE блоков.
      * @param {string} documentHash - SHA-256 хэш проверяемого документа.
      * @returns {Object} Объект результата: { isValid: boolean, status: "VALID" | "REVOKED" | "NOT_FOUND" }.
-     * @throws {TypeError} Если documentHash не является непустой строкой.
      */
     checkDocument(documentHash) {
-        // Валидация входного параметра
         if (typeof documentHash !== 'string' || documentHash.trim() === '') {
             throw new TypeError('documentHash must be a non-empty string');
         }
 
         const integrity = this.validateChain();
         if (!integrity.valid) {
-            const err = new Error(`Blockchain integrity check failed: ${integrity.error.reason}`);
-            err.code = 'BLOCKCHAIN_TAMPERED';
-            err.details = integrity.error;
-            throw err;
+            throw createChainError(
+                'BLOCKCHAIN_TAMPERED',
+                `Blockchain integrity check failed: ${integrity.error.reason}`,
+                integrity.error
+            );
         }
-        // Ищем блок ISSUE с указанным хэшем
+
         let issueBlock = null;
         for (const block of this.chain) {
             if (block.type === 'ISSUE' && block.data.documentHash === documentHash) {
@@ -340,7 +354,6 @@ class Blockchain {
             return { isValid: false, status: "NOT_FOUND" };
         }
 
-        // Если ISSUE найден, проверяем наличие блока REVOKE для этого документа
         const documentId = issueBlock.data.documentId;
         for (const block of this.chain) {
             if (block.type === 'REVOKE' && block.data.documentId === documentId) {
@@ -354,8 +367,8 @@ class Blockchain {
     /**
      * Проверяет криптографическую целостность всей цепочки блоков.
      * Валидирует genesis-блок, последовательность индексов, связь хэшей
-     * и корректность вычисленных хэшей каждого блока (обнаруживает подделку данных).
-     * @returns {boolean} true, если цепочка валидна, иначе false.
+     * и корректность вычисленных хэшей каждого блока.
+     * @returns {{ valid: boolean, error: Object|null }}
      */
     validateChain() {
         if (this.chain.length === 0) {
@@ -365,7 +378,6 @@ class Blockchain {
             };
         }
 
-        // Проверяем genesis-блок
         const genesis = this.chain[0];
         if (genesis.index !== 0) {
             return {
@@ -392,7 +404,6 @@ class Blockchain {
             };
         }
 
-        // Проверяем все последующие блоки
         for (let i = 1; i < this.chain.length; i++) {
             const current = this.chain[i];
             const previous = this.chain[i - 1];
@@ -448,6 +459,251 @@ class Blockchain {
      */
     getChainLength() {
         return this.chain.length;
+    }
+
+    /**
+     * Возвращает срез цепочки блоков для синхронизации.
+     * @param {number} [fromIndex=0] - Начальный индекс.
+     * @param {number} [limit=100] - Максимальное количество блоков.
+     * @returns {Object[]} Массив сериализованных блоков.
+     */
+    getBlocks(fromIndex = 0, limit = 100) {
+        if (fromIndex >= this.chain.length) {
+            return [];
+        }
+        return this.chain
+            .slice(fromIndex, fromIndex + limit)
+            .map(block => block.toJSON());
+    }
+
+    /**
+     * Валидирует и добавляет блок, полученный от соседней ноды по сети.
+     * Строгий порядок проверок по контракту sprint4-requirements.md §3.4.
+     * @param {Object} blockData - Сырой объект блока из JSON.
+     * @returns {Object} Результат: { accepted: boolean, reason?: string, chainLength: number }.
+     */
+    addExternalBlock(blockData) {
+        // 1. Своя цепочка целая
+        const integrity = this.validateChain();
+        if (!integrity.valid) {
+            throw createChainError(
+                'LOCAL_CHAIN_TAMPERED',
+                `Local blockchain integrity check failed: ${integrity.error.reason}`,
+                integrity.error
+            );
+        }
+
+        // 2. Формат верхнего уровня: 6 полей, типы, index >= 0, хэши — 64 hex
+        if (!blockData || typeof blockData !== 'object' || Array.isArray(blockData)) {
+            throw createChainError('INVALID_FORMAT', 'Block must be a non-null object', {
+                field: 'block',
+                problem: 'must be an object'
+            });
+        }
+
+        const requiredFields = ['index', 'timestamp', 'type', 'data', 'previousHash', 'hash'];
+        for (const field of requiredFields) {
+            if (!(field in blockData) || blockData[field] === undefined || blockData[field] === null) {
+                throw createChainError('INVALID_FORMAT', `Missing required field: ${field}`, {
+                    field,
+                    problem: 'required field is missing'
+                });
+            }
+        }
+
+        if (!Number.isInteger(blockData.index) || blockData.index < 0) {
+            throw createChainError('INVALID_FORMAT', 'Field index must be an integer >= 0', {
+                field: 'index',
+                problem: 'must be an integer >= 0'
+            });
+        }
+
+        if (typeof blockData.timestamp !== 'string' || blockData.timestamp.trim() === '') {
+            throw createChainError('INVALID_FORMAT', 'Field timestamp must be a non-empty string', {
+                field: 'timestamp',
+                problem: 'must be a non-empty string'
+            });
+        }
+
+        if (typeof blockData.type !== 'string') {
+            throw createChainError('INVALID_FORMAT', 'Field type must be a string', {
+                field: 'type',
+                problem: 'must be a string'
+            });
+        }
+
+        if (typeof blockData.data !== 'object' || Array.isArray(blockData.data)) {
+            throw createChainError('INVALID_FORMAT', 'Field data must be an object', {
+                field: 'data',
+                problem: 'must be a plain object'
+            });
+        }
+
+        if (typeof blockData.previousHash !== 'string' || !HEX_64_REGEX.test(blockData.previousHash)) {
+            throw createChainError('INVALID_FORMAT', 'Field previousHash must be 64 lowercase hex characters', {
+                field: 'previousHash',
+                problem: 'must be 64 lowercase hex characters'
+            });
+        }
+
+        if (typeof blockData.hash !== 'string' || !HEX_64_REGEX.test(blockData.hash)) {
+            throw createChainError('INVALID_FORMAT', 'Field hash must be 64 lowercase hex characters', {
+                field: 'hash',
+                problem: 'must be 64 lowercase hex characters'
+            });
+        }
+
+        // 3. Тип блока: только ISSUE или REVOKE
+        const ALLOWED_TYPES = ['ISSUE', 'REVOKE'];
+        if (!ALLOWED_TYPES.includes(blockData.type)) {
+            throw createChainError('INVALID_TYPE', `Block type "${blockData.type}" is not allowed from network`, {
+                received: blockData.type,
+                allowed: ALLOWED_TYPES
+            });
+        }
+
+        // 4. Схема data соответствует типу (и никаких лишних полей)
+        const dataKeys = Object.keys(blockData.data);
+        if (blockData.type === 'ISSUE') {
+            const expectedKeys = ['documentId', 'documentHash', 'issuerId', 'holderId'];
+            for (const key of expectedKeys) {
+                if (typeof blockData.data[key] !== 'string' || blockData.data[key].trim() === '') {
+                    throw createChainError('INVALID_FORMAT', `Field data.${key} must be a non-empty string`, {
+                        field: `data.${key}`,
+                        problem: 'must be a non-empty string'
+                    });
+                }
+            }
+            if (!HEX_64_REGEX.test(blockData.data.documentHash)) {
+                throw createChainError('INVALID_FORMAT', 'Field data.documentHash must be 64 lowercase hex characters', {
+                    field: 'data.documentHash',
+                    problem: 'must be 64 lowercase hex characters'
+                });
+            }
+            const extraKey = dataKeys.find(k => !expectedKeys.includes(k));
+            if (extraKey) {
+                throw createChainError('INVALID_FORMAT', `Unexpected field in data: ${extraKey}`, {
+                    field: `data.${extraKey}`,
+                    problem: 'unexpected field'
+                });
+            }
+        } else if (blockData.type === 'REVOKE') {
+            const expectedKeys = ['documentId'];
+            if (typeof blockData.data.documentId !== 'string' || blockData.data.documentId.trim() === '') {
+                throw createChainError('INVALID_FORMAT', 'Field data.documentId must be a non-empty string', {
+                    field: 'data.documentId',
+                    problem: 'must be a non-empty string'
+                });
+            }
+            const extraKey = dataKeys.find(k => !expectedKeys.includes(k));
+            if (extraKey) {
+                throw createChainError('INVALID_FORMAT', `Unexpected field in data: ${extraKey}`, {
+                    field: `data.${extraKey}`,
+                    problem: 'unexpected field'
+                });
+            }
+        }
+
+        // 5. Пересчитанный hash === присланному
+        const candidateBlock = new Block(
+            blockData.index,
+            blockData.timestamp,
+            blockData.type,
+            blockData.data,
+            blockData.previousHash,
+            blockData.hash
+        );
+        const recalculatedHash = candidateBlock.calculateHash();
+        if (recalculatedHash !== blockData.hash) {
+            throw createChainError('INVALID_HASH', 'Block hash does not match recalculated hash', {
+                expected: recalculatedHash,
+                received: blockData.hash
+            });
+        }
+
+        // 6 & 7. Проверка занятости index (дубликат или конфликт)
+        if (blockData.index < this.chain.length) {
+            const existingBlock = this.chain[blockData.index];
+            if (existingBlock.hash === blockData.hash) {
+                return {
+                    accepted: false,
+                    reason: 'DUPLICATE_BLOCK',
+                    chainLength: this.chain.length
+                };
+            }
+            throw createChainError('BLOCK_CONFLICT', `Block conflict at index ${blockData.index}`, {
+                index: blockData.index,
+                localHash: existingBlock.hash,
+                receivedHash: blockData.hash
+            });
+        }
+
+        // 8a. Проверка на разрыв индексов (дырка)
+        const latest = this.getLatestBlock();
+        if (blockData.index > latest.index + 1) {
+            throw createChainError('CHAIN_GAP', `Chain gap: expected index ${latest.index + 1}, got ${blockData.index}`, {
+                receivedIndex: blockData.index,
+                expectedIndex: latest.index + 1
+            });
+        }
+
+        // 8b. Проверка стыковки с предыдущим хэшем
+        if (blockData.previousHash !== latest.hash) {
+            throw createChainError('PREV_HASH_MISMATCH', 'previousHash does not match latest block hash', {
+                expected: latest.hash,
+                received: blockData.previousHash
+            });
+        }
+
+        // 9. Бизнес-правила
+        if (blockData.type === 'ISSUE') {
+            for (const block of this.chain) {
+                if (block.type === 'ISSUE') {
+                    if (block.data.documentId === blockData.data.documentId) {
+                        throw createChainError('DUPLICATE_DOCUMENT', `Document already exists with ID: ${blockData.data.documentId}`, {
+                            field: 'documentId',
+                            value: blockData.data.documentId
+                        });
+                    }
+                    if (block.data.documentHash === blockData.data.documentHash) {
+                        throw createChainError('DUPLICATE_DOCUMENT', `Document already exists with hash: ${blockData.data.documentHash}`, {
+                            field: 'documentHash',
+                            value: blockData.data.documentHash
+                        });
+                    }
+                }
+            }
+        } else if (blockData.type === 'REVOKE') {
+            let foundIssue = false;
+            let foundRevoke = false;
+            for (const block of this.chain) {
+                if (block.type === 'ISSUE' && block.data.documentId === blockData.data.documentId) {
+                    foundIssue = true;
+                }
+                if (block.type === 'REVOKE' && block.data.documentId === blockData.data.documentId) {
+                    foundRevoke = true;
+                }
+            }
+            if (!foundIssue) {
+                throw createChainError('DOCUMENT_NOT_FOUND', `Document ${blockData.data.documentId} not found`, {
+                    documentId: blockData.data.documentId
+                });
+            }
+            if (foundRevoke) {
+                throw createChainError('ALREADY_REVOKED', `Document ${blockData.data.documentId} already revoked`, {
+                    documentId: blockData.data.documentId
+                });
+            }
+        }
+
+        // 10. Добавляем блок и сохраняем на диск
+        this.chain.push(candidateBlock);
+        this.save();
+
+        return {
+            accepted: true,
+            chainLength: this.chain.length
+        };
     }
 }
 

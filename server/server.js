@@ -10,6 +10,8 @@ const { Blockchain } = require('../blockchain/blockchain');
 const authRoutes = require('./routes/auth');
 const documentsRoutes = require('./routes/documents');
 const validationRoutes = require('./routes/validation');
+const nodeRoutes = require('./routes/node');
+const p2pService = require('./services/p2pService');
 
 const app = express();
 
@@ -22,18 +24,30 @@ if (!fs.existsSync(config.UPLOADS_DIR)) {
     fs.mkdirSync(config.UPLOADS_DIR, { recursive: true });
 }
 
-// Инициализируем блокчейн и сохраняем в app для доступа из роутов
-const blockchain = new Blockchain();
+// Инициализируем блокчейн для конкретной ноды (якорим путь от корня репозитория)
+const blockchainPath = path.resolve(__dirname, '..', config.BLOCKCHAIN_FILE);
+const blockchain = new Blockchain(blockchainPath);
 app.set('blockchain', blockchain);
 
 // Подключаем роуты
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/validation', validationRoutes);
+app.use('/api/node', nodeRoutes);
+
+// Публичный эндпоинт статуса ноды для UI
+app.get('/api/status', async (req, res) => {
+    try {
+        const status = await p2pService.getNetworkStatus(blockchain);
+        res.status(200).json(status);
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
 
 // Запуск сервера
 app.listen(config.PORT, () => {
-    console.log(`Server is running on port ${config.PORT}`);
+    console.log(`[${config.NODE_ID}] Server is running on port ${config.PORT}`);
 });
 
 // Экспортируем app для тестирования

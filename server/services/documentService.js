@@ -5,21 +5,13 @@ const path = require('path');
 const pool = require('../db');
 const config = require('../config');
 const { calculateFileHash } = require('../utils/fileUtils');
+const p2pService = require('./p2pService');
 
 /**
  * Выпускает новый документ с использованием транзакций для обеспечения консистентности
- * между базой данных и блокчейном.
- * @param {Object} blockchain - Экземпляр блокчейна.
- * @param {number} issuerId - ID эмитента.
- * @param {string} type - Тип документа ('CERTIFICATE' или 'DIPLOMA').
- * @param {string} holderEmail - Email владельца.
- * @param {Object} file - Загруженный файл (multer file object).
- * @returns {Promise<Object>} Результат выпуска { documentId, message }.
- * @throws {Error} Если holder не найден или имеет неверную роль.
- * @throws {Error} Если произошла ошибка при создании документа.
+ * между базой данных и блокчейном, а затем рассылает новый блок соседям.
  */
 async function issueDocument(blockchain, issuerId, type, holderEmail, file) {
-    // Находим holder по email
     const [holders] = await pool.query(
         'SELECT id, role FROM users WHERE email = ?',
         [holderEmail]
@@ -36,21 +28,17 @@ async function issueDocument(blockchain, issuerId, type, holderEmail, file) {
 
     const holderId = holder.id;
 
-    // Генерируем UUID для имени файла
     const crypto = require('crypto');
     const fileUUID = crypto.randomUUID();
     const fileName = `${fileUUID}.pdf`;
     const filePath = path.join(config.UPLOADS_DIR, fileName);
 
-    // Сохраняем файл на диск
     await fs.writeFile(filePath, file.buffer);
 
     const connection = await pool.getConnection();
     try {
-        // Начинаем транзакцию для обеспечения атомарности операции
         await connection.beginTransaction();
-        
-        // Вычисляем хэш файла
+
         const documentHash = calculateFileHash(file.buffer);
 
         // 1. Сначала вставляем в БД
@@ -58,58 +46,50 @@ async function issueDocument(blockchain, issuerId, type, holderEmail, file) {
             'INSERT INTO documents (type, issuer_id, holder_id, file_name, document_hash) VALUES (?, ?, ?, ?, ?)',
             [type, issuerId, holderId, fileName, documentHash]
         );
-        
+
         const dbDocumentId = result.insertId;
-        
+
         // 2. Потом добавляем в блокчейн
-        // Используем ID из БД как documentId для блокчейна
-        blockchain.issueDocument(
+        const createdBlock = blockchain.issueDocument(
             dbDocumentId.toString(),
             documentHash,
             issuerId.toString(),
             holderId.toString()
         );
-        
-        // Коммитим транзакцию только если всё прошло успешно
+
+        // Коммитим транзакцию
         await connection.commit();
-        
+
+        // 3. Рассылаем новый блок соседям после успешного commit
+        await p2pService.broadcastBlock(createdBlock);
+
         return {
             documentId: dbDocumentId,
             message: 'Document issued successfully'
         };
     } catch (error) {
-        // Откатываем транзакцию при любой ошибке
         await connection.rollback();
-        
-        // Удаляем файл если он был создан
+
         try {
             await fs.unlink(filePath);
         } catch (unlinkError) {
             // Игнорируем ошибку удаления файла
         }
-        
+
         throw error;
     } finally {
-        // Всегда освобождаем соединение
         connection.release();
     }
 }
 
 /**
- * Отзывает документ с использованием транзакций для обеспечения консистентности.
- * @param {Object} blockchain - Экземпляр блокчейна.
- * @param {number} issuerId - ID эмитента, выполняющего отзыв.
- * @param {number} documentId - ID документа в базе данных.
- * @returns {Promise<Object>} Результат отзыва { message }.
- * @throws {Error} Если документ не найден.
- * @throws {Error} Если эмитент не имеет прав на отзыв.
+ * Отзывает документ с использованием транзакций и рассылает блок отзыва соседям.
  */
 async function revokeDocument(blockchain, issuerId, documentId) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        
-        // Получаем документ из БД
+
         const [documents] = await connection.query(
             'SELECT * FROM documents WHERE id = ?',
             [documentId]
@@ -121,7 +101,6 @@ async function revokeDocument(blockchain, issuerId, documentId) {
 
         const document = documents[0];
 
-        // Проверяем права: только эмитент может отозвать свой документ
         if (document.issuer_id !== issuerId) {
             throw new Error('Not authorized to revoke this document');
         }
@@ -133,9 +112,12 @@ async function revokeDocument(blockchain, issuerId, documentId) {
         );
 
         // 2. Потом добавляем блок отзыва в блокчейн
-        blockchain.revokeDocument(documentId.toString());
+        const revokeBlock = blockchain.revokeDocument(documentId.toString());
 
         await connection.commit();
+
+        // 3. Рассылаем новый блок соседям после успешного commit
+        await p2pService.broadcastBlock(revokeBlock);
 
         return {
             message: 'Document revoked successfully'
@@ -150,13 +132,10 @@ async function revokeDocument(blockchain, issuerId, documentId) {
 
 /**
  * Получает список документов пользователя в зависимости от его роли.
- * @param {number} userId - ID пользователя.
- * @param {string} role - Роль пользователя ('ISSUER' или 'HOLDER').
- * @returns {Promise<Array>} Массив документов пользователя.
  */
 async function getMyDocuments(userId, role) {
     let query;
-    
+
     if (role === 'HOLDER') {
         query = 'SELECT * FROM documents WHERE holder_id = ? ORDER BY issued_at DESC';
     } else if (role === 'ISSUER') {
