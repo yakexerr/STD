@@ -18,6 +18,11 @@
   * `ADR-0002`: Стратегия разделения данных (On-chain vs Off-chain).
   * `ADR-0003`: Выбор реляционной СУБД для Off-chain хранилища (MySQL).
 
+## Запуск тестов
+```
+node ./node_modules/jest/bin/jest.js --coverage
+```
+
 ## 📂 Навигация по репозиторию
 *   [Канбан-доска (Задачи)](https://github.com/users/yakexerr/projects/4)
 *   [Правила разработки (CONTRIBUTING.md)](CONTRIBUTING.md)
